@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Setline Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one phone-sized app column. On wide screens a side panel holds the role switcher and notes. Set-friendly dark only. */
+:root {
+  --bg: #0b0c0e;
+  --surface: #141619;
+  --surface-2: #1c1f23;
+  --line: #2a2e34;
+  --text: #ece8e0;
+  --muted: #8e9198;
+  --faint: #5d6168;
+  --amber: #f0a83a;
+  --amber-ink: #1a1206;
+  --red: #e5484d;
+  --green: #3fb67a;
+  --font-head: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:disabled { cursor: not-allowed; }
+input, textarea, select { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 100%; }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--amber); outline-offset: 1px; border-color: transparent; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: var(--font-head); font-weight: 600; letter-spacing: .01em; margin: 0; text-wrap: balance; }
+
+/* Page frame */
+.page { display: flex; gap: 40px; justify-content: center; align-items: flex-start; padding-block: 28px; max-width: 1080px; margin: 0 auto; }
+.side { width: 300px; flex: none; display: flex; flex-direction: column; gap: 22px; padding-top: 8px; }
+.side h1 { font-size: 34px; line-height: 1; text-transform: uppercase; letter-spacing: .04em; }
+.side h1 span { color: var(--amber); }
+.side p { color: var(--muted); margin: 0; font-size: 14px; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.roles { display: flex; flex-wrap: wrap; gap: 6px; }
+.rchip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--muted); }
+.rchip[aria-pressed="true"] { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); font-weight: 600; }
+.rnote { font-size: 13px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; }
+.rnote b { color: var(--text); font-weight: 500; }
+
+.phone { width: 390px; height: 800px; max-height: calc(100vh - 56px); min-height: 640px; flex: none; background: var(--bg); border: 1px solid var(--line); border-radius: 44px; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+.sbar { height: 44px; flex: none; display: flex; justify-content: space-between; align-items: center; padding: 0 28px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.mobilebar { display: none; }
+
+@media (max-width: 760px) {
+  body { padding-left: 0; padding-right: 0; }
+  .page { display: block; padding-block: 0; }
+  .side { display: none; }
+  .phone { width: 100%; height: 100vh; height: 100dvh; max-height: none; min-height: 0; border-radius: 0; border: 0; box-shadow: none; }
+  .sbar { display: none; }
+  .mobilebar { display: flex; gap: 8px; align-items: center; padding: 8px max(12px, env(safe-area-inset-left, 0px)); background: var(--surface); border-bottom: 1px solid var(--line); flex: none; }
+  .mobilebar label { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+  .mobilebar select { padding: 6px 8px; font-size: 14px; }
+}
+
+/* App chrome */
+.screen { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
+.hdr { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 18px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+.hdr .t { flex: 1; min-width: 0; }
+.hdr h2 { font-size: 24px; line-height: 1.05; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hdr .sub { font-size: 12px; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.iconbtn { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); flex: none; }
+.iconbtn:hover { background: var(--surface-2); color: var(--text); }
+.iconbtn svg { width: 20px; height: 20px; }
+.body { padding: 16px 18px 28px; display: flex; flex-direction: column; gap: 18px; }
+.tabbar { flex: none; display: flex; border-top: 1px solid var(--line); background: var(--surface); padding: 6px 4px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; font-size: 11px; color: var(--faint); font-weight: 500; position: relative; }
+.tab svg { width: 22px; height: 22px; }
+.tab[aria-current="page"] { color: var(--amber); }
+.tab .dot { position: absolute; top: 4px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+.wrapband { background: var(--surface-2); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; padding: 7px 18px; display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.wrapband b { color: var(--amber); font-weight: 500; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; padding: 11px 16px; font-weight: 600; font-size: 15px; background: var(--surface-2); border: 1px solid var(--line); }
+.btn.primary { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); }
+.btn.danger { background: transparent; color: var(--red); border-color: rgba(229,72,77,.45); }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .4; }
+.btn svg { width: 18px; height: 18px; }
+.seclabel { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.seclabel button { color: var(--amber); letter-spacing: .06em; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; }
+.muted { color: var(--muted); }
+.empty { color: var(--muted); font-size: 14px; padding: 24px 8px; text-align: center; }
+
+/* Sign in */
+.signin { flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 64px 26px 36px; }
+.logo { font-family: var(--font-head); font-weight: 700; font-size: 64px; line-height: .9; text-transform: uppercase; letter-spacing: .02em; }
+.logo i { font-style: normal; color: var(--amber); }
+.slate { display: grid; grid-template-columns: repeat(8, 1fr); height: 14px; margin: 18px 0 22px; border-radius: 2px; overflow: hidden; }
+.slate span:nth-child(odd) { background: var(--text); }
+.slate span:nth-child(even) { background: var(--bg); }
+.signin p { color: var(--muted); margin: 0; max-width: 30ch; }
+
+/* Projects */
+.pcard { text-align: left; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.pcard h3 { font-size: 24px; text-transform: uppercase; letter-spacing: .02em; line-height: 1; }
+.pcard .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pcard .meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.status { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.status.live { color: var(--red); border-color: rgba(229,72,77,.5); }
+.status.live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--red); margin-right: 6px; vertical-align: 1px; }
+.status.prep { color: var(--amber); border-color: rgba(240,168,58,.45); }
+.btnrow { display: flex; gap: 10px; }
+.btnrow > * { flex: 1; }
+
+/* Pinned strip + channels */
+.pinned { display: grid; grid-template-columns: auto auto 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.pinned > div { background: var(--surface); padding: 9px 12px; min-width: 0; }
+.pinned .k { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.pinned .v { font-family: var(--font-head); font-size: 20px; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pinned .v.amber { color: var(--amber); }
+.clist { display: flex; flex-direction: column; }
+.crow { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); text-align: left; width: 100%; }
+.crow:last-child { border-bottom: 0; }
+.crow .hash { font-family: var(--font-mono); color: var(--faint); width: 14px; }
+.crow .nm { flex: 1; min-width: 0; }
+.crow .nm b { font-weight: 500; display: block; }
+.crow .nm > span { font-size: 13px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crow.unread .nm b { font-weight: 600; }
+.badge { min-width: 22px; height: 22px; border-radius: 11px; padding: 0 7px; background: var(--amber); color: var(--amber-ink); font-size: 12px; font-weight: 700; display: grid; place-items: center; font-family: var(--font-mono); }
+.tagc { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--green); border: 1px solid rgba(63,182,122,.4); border-radius: 4px; padding: 1px 5px; }
+
+/* Chat */
+.chat { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; }
+.msg { display: flex; gap: 10px; }
+.av { width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center; font-family: var(--font-head); font-weight: 600; font-size: 14px; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+.msg .c { min-width: 0; flex: 1; }
+.msg .who { font-size: 13px; font-weight: 600; }
+.msg .who span { color: var(--muted); font-weight: 400; font-family: var(--font-mono); font-size: 11px; margin-left: 6px; }
+.msg .txt { overflow-wrap: anywhere; }
+.msg.sys { justify-content: center; }
+.msg.sys .c { flex: none; max-width: 100%; text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; }
+.msg.sys .c.ok { color: var(--green); border-color: rgba(63,182,122,.4); }
+.attach { margin-top: 6px; border-radius: 10px; overflow: hidden; width: 200px; max-width: 100%; border: 1px solid var(--line); }
+.file { margin-top: 6px; display: inline-flex; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.file .ext { font-family: var(--font-mono); font-size: 10px; background: var(--surface-2); padding: 3px 5px; border-radius: 4px; color: var(--amber); }
+.composer { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 12px; display: flex; gap: 8px; align-items: center; }
+.composer input { border-radius: 20px; padding: 9px 14px; }
+.composer .iconbtn { border-radius: 50%; }
+.composer .send { background: var(--amber); color: var(--amber-ink); }
+.readonly-note { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px; text-align: center; font-size: 13px; color: var(--muted); }
+
+/* Walkie */
+.walkie { padding: 14px 18px 24px; display: flex; flex-direction: column; gap: 18px; align-items: stretch; }
+.seg { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; }
+.seg button { flex: 1; padding: 8px 6px; border-radius: 9px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.wstate { text-align: center; display: flex; flex-direction: column; gap: 2px; min-height: 64px; justify-content: center; }
+.wstate .big { font-family: var(--font-head); font-size: 30px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1; }
+.wstate .big.live { color: var(--red); }
+.wstate .big.busy { color: var(--amber); }
+.wstate .small { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.ptt-wrap { display: grid; place-items: center; padding: 4px 0; }
+.ptt { width: 210px; height: 210px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; user-select: none; -webkit-user-select: none; touch-action: none; -webkit-touch-callout: none; transition: transform .08s ease, background .12s; }
+.ptt svg { width: 46px; height: 46px; color: var(--amber); }
+.ptt .lab { font-family: var(--font-head); font-size: 22px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.ptt:not(:disabled):hover { border-color: var(--amber); }
+.ptt.on { background: var(--red); border-color: var(--red); transform: scale(.97); box-shadow: 0 0 0 10px rgba(229,72,77,.18), 0 0 0 22px rgba(229,72,77,.08); }
+.ptt.on svg { color: #fff; }
+.ptt.on .lab { color: #fff; }
+.ptt:disabled { opacity: .45; }
+.ptt:disabled svg { color: var(--muted); }
+.meter { display: flex; gap: 3px; height: 26px; align-items: flex-end; justify-content: center; }
+.meter i { width: 6px; border-radius: 2px; background: var(--line); height: 4px; transition: height .06s; }
+.meter.live i { background: var(--red); }
+.meter.busy i { background: var(--amber); }
+.wfoot { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.wfoot .ok { color: var(--green); }
+.tlog { display: flex; flex-direction: column; }
+.tlog .r { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.tlog .r:last-child { border-bottom: 0; }
+.tlog .r .n { flex: 1; min-width: 0; }
+.tlog .r .mono { font-size: 12px; color: var(--muted); }
+.nowalkie { padding: 60px 26px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; color: var(--muted); }
+.nowalkie h3 { font-size: 26px; text-transform: uppercase; color: var(--text); }
+
+/* Review */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--muted); }
+.chip[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
+.frames { display: flex; flex-direction: column; gap: 16px; }
+.fcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.fcard.approved { border-color: rgba(63,182,122,.55); }
+.fcard.alt { opacity: .62; }
+.fbody { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+.fmeta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fmeta .mono { font-size: 15px; }
+.flook { font-size: 14px; color: var(--muted); }
+.pill { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; padding: 2px 8px; border-radius: 4px; }
+.pill.pending { color: var(--amber); background: rgba(240,168,58,.12); }
+.pill.approved { color: var(--green); background: rgba(63,182,122,.14); }
+.pill.alt { color: var(--muted); background: var(--surface-2); }
+.fsign { font-family: var(--font-mono); font-size: 11px; color: var(--green); }
+.factions { display: flex; border-top: 1px solid var(--line); }
+.factions button { flex: 1; padding: 11px 4px; font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); }
+.factions button + button { border-left: 1px solid var(--line); }
+.factions .ap { color: var(--green); font-weight: 600; }
+.factions .fav[aria-pressed="true"] { color: var(--amber); }
+.factions svg { width: 17px; height: 17px; }
+
+/* Placeholder frame art (stands in for campaign photos) */
+.art { position: relative; aspect-ratio: 4 / 5; width: 100%; max-width: 100%; overflow: hidden; background: radial-gradient(120% 90% at 30% 20%, hsl(var(--h) 38% 86%), hsl(calc(var(--h) + 8) 28% 66%) 60%, hsl(calc(var(--h) + 14) 22% 42%)); }
+.art.wide { aspect-ratio: 4 / 3; }
+.art .b { position: absolute; left: 41%; bottom: 14%; width: 18%; height: 44%; border-radius: 10px 10px 7px 7px; background: linear-gradient(90deg, #b06d22, #f2c27b 38%, #e3a24c 60%, #8d5418); box-shadow: 18px 24px 30px rgba(40,20,5,.35); }
+.art .b::before { content: ""; position: absolute; left: 22%; right: 22%; top: -24%; height: 26%; border-radius: 6px 6px 2px 2px; background: linear-gradient(90deg, #111, #444 40%, #151515); }
+.art .b::after { content: "HALDEN"; position: absolute; left: 0; right: 0; top: 44%; text-align: center; font-family: var(--font-head); font-size: 9px; letter-spacing: .2em; color: rgba(60,30,5,.75); }
+.art .face { position: absolute; width: 62%; height: 70%; left: 19%; top: 10%; border-radius: 48% 48% 44% 44%; background: radial-gradient(60% 50% at 38% 34%, hsl(24 55% 62%), hsl(20 45% 38%) 70%, hsl(18 40% 26%)); box-shadow: inset -18px -10px 40px rgba(30,10,0,.35); }
+.art .face::after { content: ""; position: absolute; left: 24%; top: 30%; width: 22%; height: 10%; border-radius: 50%; background: rgba(255,240,220,.35); filter: blur(4px); }
+.art .hand { position: absolute; width: 56%; height: 28%; left: 10%; bottom: 10%; border-radius: 40px 60px 30px 40px; background: linear-gradient(170deg, hsl(26 50% 66%), hsl(22 42% 46%)); transform: rotate(-12deg); }
+.art .swatch { position: absolute; width: 70%; height: 22%; left: 15%; top: 40%; border-radius: 50%; background: radial-gradient(60% 60% at 40% 40%, rgba(255,214,150,.95), rgba(210,140,50,.7) 60%, transparent 72%); transform: rotate(-8deg); }
+.art .tag { position: absolute; left: 8px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,.8); background: rgba(0,0,0,.35); padding: 2px 5px; border-radius: 3px; }
+
+/* Shots */
+.progress { display: flex; flex-direction: column; gap: 8px; }
+.progress .bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.progress .bar i { display: block; height: 100%; background: var(--green); border-radius: 4px; transition: width .3s; }
+.progress .num { font-family: var(--font-head); font-size: 34px; font-weight: 600; line-height: 1; }
+.progress .num span { color: var(--muted); font-size: 22px; }
+.slist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.srow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.srow:last-child { border-bottom: 0; }
+.srow .no { font-family: var(--font-mono); color: var(--faint); font-size: 13px; width: 22px; }
+.srow .nm { flex: 1; min-width: 0; }
+.srow .nm b { font-weight: 500; display: block; }
+.srow .nm span { font-family: var(--font-mono); font-size: 11px; color: var(--green); display: block; }
+.srow.done .nm b { color: var(--muted); }
+.check { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--line); display: grid; place-items: center; flex: none; }
+.check svg { width: 16px; height: 16px; color: var(--bg); }
+.srow.done .check { background: var(--green); border-color: var(--green); }
+.check:disabled { opacity: 1; cursor: default; }
+.del { color: var(--faint); width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; }
+.del:hover { color: var(--red); }
+.del svg { width: 16px; height: 16px; }
+.addrow { display: flex; gap: 8px; }
+.addrow .btn { flex: none; }
+
+/* Info */
+.callgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.callgrid > div { background: var(--surface); padding: 12px 14px; min-width: 0; }
+.callgrid .full { grid-column: 1 / -1; }
+.callgrid .k { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.callgrid .v { font-family: var(--font-head); font-size: 26px; font-weight: 600; line-height: 1.1; }
+.callgrid .v.amber { color: var(--amber); }
+.callgrid .addr { font-size: 14px; }
+.callgrid a { color: var(--amber); font-size: 13px; text-decoration: none; }
+.sched { display: flex; flex-direction: column; }
+.sched .r { display: flex; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.sched .r:last-child { border-bottom: 0; }
+.sched .r .mono { color: var(--amber); width: 64px; flex: none; font-size: 13px; }
+.sched .r.past .mono, .sched .r.past span { color: var(--faint); }
+.sched .r span { flex: 1; }
+.people { display: flex; flex-direction: column; gap: 14px; }
+.dept { display: flex; flex-direction: column; gap: 8px; }
+.prow { display: flex; gap: 12px; align-items: center; }
+.prow .n { flex: 1; min-width: 0; }
+.prow .n b { font-weight: 500; display: block; }
+.prow .n span { font-size: 13px; color: var(--muted); }
+.rtag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+.ping { font-size: 12px; color: var(--amber); border: 1px solid rgba(240,168,58,.4); border-radius: 6px; padding: 3px 8px; }
+.danger-zone { border: 1px solid rgba(229,72,77,.35); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.danger-zone p { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* Sheets and toast */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.6); z-index: 20; display: flex; align-items: flex-end; }
+.sheet { width: 100%; max-height: 88%; overflow-y: auto; background: var(--surface); border-top: 1px solid var(--line); border-radius: 20px 20px 0 0; padding: 10px 18px calc(22px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; }
+.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); align-self: center; }
+.sheet h3 { font-size: 26px; text-transform: uppercase; }
+.sheet p { margin: 0; color: var(--muted); font-size: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.roll { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.roll button { border-radius: 8px; overflow: hidden; border: 2px solid transparent; }
+.roll button[aria-pressed="true"] { border-color: var(--amber); }
+.qr { align-self: center; background: #f2efe8; padding: 12px; border-radius: 12px; }
+.qr canvas { display: block; width: 168px; height: 168px; image-rendering: pixelated; }
+.linkbox { display: flex; gap: 8px; align-items: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 12px; }
+.linkbox .mono { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rolepick { display: flex; flex-wrap: wrap; gap: 6px; }
+.comments { display: flex; flex-direction: column; gap: 12px; }
+.toast { position: absolute; left: 16px; right: 16px; bottom: 86px; z-index: 30; background: var(--text); color: var(--bg); font-weight: 500; font-size: 14px; border-radius: 12px; padding: 11px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.toast.ok { background: var(--green); color: #04140b; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <aside class="side" aria-label="Prototype controls">
+    <div>
+      <h1>Set<span>line</span></h1>
+      <p style="margin-top:8px">Clickable prototype with sample data. Nothing here is saved or sent.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">View the project as</div>
+      <div class="roles" id="roleChips"></div>
+      <div class="rnote" id="roleNote"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="eyebrow">Things to try</div>
+      <p>Hold the walkie button (or press and hold the space bar). Wait a few seconds and someone else talks, so your button locks.</p>
+      <p>As Client, approve a Look 04 frame. The other options go to Alt, the shot list checks off Look 04, and a note lands in client-review.</p>
+      <p>As Client or Talent, notice the crew channels and the walkie tab are gone.</p>
+      <p>As Producer, open Info to invite someone or wrap the project.</p>
+    </div>
+  </aside>
+
+  <div class="phone" id="phone">
+    <div class="sbar"><span id="clock">11:52</span><span>5G ▮▮▮</span></div>
+    <div class="mobilebar">
+      <label for="roleSelect">View as</label>
+      <select id="roleSelect"></select>
+    </div>
+    <div id="app" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Sample data: Halden Skincare ----------
+  const ROLES = {
+    producer:     { label: "Producer",        who: "maya",  walkie: 1, approve: 1, send: 1, edit: 1, manage: 1 },
+    photographer: { label: "Photographer",    who: "theo",  walkie: 1, approve: 1, send: 1, edit: 1 },
+    digi:         { label: "Digi tech",       who: "rafi",  walkie: 1, send: 1 },
+    crew:         { label: "Crew",            who: "jonah", walkie: 1, edit: 1 },
+    glam:         { label: "Glam / wardrobe", who: "lena",  walkie: 1 },
+    agency:       { label: "Agency",          who: "carla", approve: 1 },
+    client:       { label: "Client",          who: "erin",  approve: 1 },
+    talent:       { label: "Talent",          who: "ama" }
+  };
+  const ROLE_NOTES = {
+    producer: "<b>Sees everything.</b> Walkie, approvals, shot list, invites and wrap.",
+    photographer: "<b>Sees everything.</b> Can approve and send frames. Can't wrap the project.",
+    digi: "<b>Sends frames.</b> Sees general, crew, digi-tech and client-review. Can't approve.",
+    crew: "<b>Walkie and shot list.</b> Sees general, crew and digi-tech. No client channel.",
+    glam: "<b>Walkie on the glam channel.</b> Sees general, glam and wardrobe.",
+    agency: "<b>No walkie, no crew channels.</b> Sees general and client-review. Approves frames.",
+    client: "<b>No walkie, no crew channels.</b> Sees general and client-review. Approves frames.",
+    talent: "<b>Just the basics.</b> Sees general and talent. No walkie, no frames."
+  };
+  const P = {
+    maya:  { name: "Maya Okafor",  role: "producer",     title: "Producer",          dept: "Production" },
+    theo:  { name: "Theo Lind",    role: "photographer", title: "Photographer",      dept: "Camera" },
+    rafi:  { name: "Rafi Mendez",  role: "digi",         title: "Digital tech",      dept: "Camera" },
+    jonah: { name: "Jonah Pike",   role: "crew",         title: "1st Assistant",     dept: "Camera" },
+    dee:   { name: "Dee Alvarez",  role: "crew",         title: "Gaffer",            dept: "Grip & electric" },
+    sun:   { name: "Sun Park",     role: "crew",         title: "Key grip",          dept: "Grip & electric" },
+    lena:  { name: "Lena Sato",    role: "glam",         title: "Hair & makeup",     dept: "Glam & wardrobe" },
+    priya: { name: "Priya Nair",   role: "glam",         title: "Wardrobe stylist",  dept: "Glam & wardrobe" },
+    carla: { name: "Carla Voss",   role: "agency",       title: "Art director, Northfold", dept: "Agency & client" },
+    erin:  { name: "Erin Shaw",    role: "client",       title: "Brand manager, Halden",   dept: "Agency & client" },
+    ama:   { name: "Ama Boateng",  role: "talent",       title: "Talent",            dept: "Talent" }
+  };
+  const ALL = Object.keys(ROLES);
+  const CORE = ["producer", "photographer"];
+  const channels = [
+    { slug: "general",       desc: "Everyone on the job",          roles: ALL },
+    { slug: "crew",          desc: "Camera, grip and electric",    roles: CORE.concat(["digi", "crew"]) },
+    { slug: "glam",          desc: "Hair and makeup",              roles: CORE.concat(["glam"]) },
+    { slug: "wardrobe",      desc: "Pulls, fittings, steaming",    roles: CORE.concat(["glam"]) },
+    { slug: "digi-tech",     desc: "Capture, backups, naming",     roles: CORE.concat(["digi", "crew"]) },
+    { slug: "client-review", desc: "Frames for approval",          roles: CORE.concat(["digi", "agency", "client"]), client: true },
+    { slug: "talent",        desc: "Talent and production",        roles: CORE.concat(["talent"]) }
+  ];
+  const IMG = (k, h) => ({ img: { k: k, h: h } });
+  const FILE = (n) => ({ file: n });
+  const msgs = {
+    "general": [
+      { by: "maya", t: "6:41", body: "Morning all. Studio B, freight elevator is on 28th. Coffee is up." },
+      { by: "maya", t: "6:42", body: "Final call sheet.", ...FILE("Halden_callsheet_v3.pdf") },
+      { by: "erin", t: "9:15", body: "Hi everyone, Erin from Halden. Excited for today." },
+      { by: "maya", t: "11:40", body: "Lunch at 12:30 in the back lounge." }
+    ],
+    "crew": [
+      { by: "jonah", t: "7:10", body: "Tethered and live. Heads on stands 1 to 3." },
+      { by: "dee",   t: "7:24", body: "Swapping key to the 3' octa for Look 01." },
+      { by: "sun",   t: "7:31", body: "Flag setup for the bottle kicker.", ...IMG("wide", 210) },
+      { by: "theo",  t: "11:46", body: "100 macro for Look 05 next. Clear the table." }
+    ],
+    "glam": [
+      { by: "lena", t: "7:35", body: "Ama in the chair at 8. Dewy skin, no shimmer per agency." },
+      { by: "lena", t: "11:20", body: "Touch up before Look 04, 5 minutes." },
+      { by: "priya", t: "11:31", body: "Steamer is in the hallway. Please don't unplug it." }
+    ],
+    "wardrobe": [
+      { by: "priya", t: "7:20", body: "Robe options, cream vs oat.", ...IMG("wide", 32) },
+      { by: "maya",  t: "7:28", body: "Oat. Client approved yesterday." }
+    ],
+    "digi-tech": [
+      { by: "rafi",  t: "7:45", body: "Session is HLD_Spring26. Files are HLD_####." },
+      { by: "rafi",  t: "10:40", body: "Card 1 backed up to both drives." },
+      { by: "jonah", t: "10:41", body: "Copy." }
+    ],
+    "client-review": [
+      { sys: 1, t: "9:58",  body: "Rafi sent HLD_0138 for Look 01" },
+      { sys: 1, t: "10:14", body: "Rafi sent HLD_0141 for Look 01" },
+      { sys: 1, ok: 1, t: "10:21", body: "Carla approved HLD_0141. Look 01 checked off." },
+      { by: "carla", t: "10:22", body: "Love the highlight on the cap." },
+      { sys: 1, ok: 1, t: "11:04", body: "Erin approved HLD_0146. Look 02 checked off." },
+      { sys: 1, ok: 1, t: "11:38", body: "Carla approved HLD_0152. Look 03 checked off." },
+      { by: "rafi",  t: "11:49", body: "Look 04 options coming in now." },
+      { sys: 1, t: "11:50", body: "Rafi sent HLD_0158, HLD_0160, HLD_0163 for Look 04" }
+    ],
+    "talent": [
+      { by: "maya", t: "8:10", body: "Ama, lunch is at 12:30. Any food needs?" },
+      { by: "ama",  t: "8:12", body: "Vegetarian, thank you!" }
+    ]
+  };
+  // unread per role: start with a few so badges show
+  const unread = { general: 1, crew: 1, glam: 2, wardrobe: 0, "digi-tech": 0, "client-review": 3, talent: 0 };
+
+  const shots = [
+    { n: 1, name: "Serum hero bottle" },
+    { n: 2, name: "Dropper in hand" },
+    { n: 3, name: "Ama close-up, dewy skin" },
+    { n: 4, name: "Ama holding serum" },
+    { n: 5, name: "Texture swatch" },
+    { n: 6, name: "Full line flat lay" },
+    { n: 7, name: "Bathroom shelf" },
+    { n: 8, name: "Social vertical 9:16" }
+  ];
+  const ART = { 1: "bottle", 2: "hand", 3: "face", 4: "facebottle", 5: "swatch", 6: "bottle", 7: "bottle", 8: "face" };
+  const frames = [
+    { code: "HLD_0138", shot: 1, h: 34, status: "alt" },
+    { code: "HLD_0141", shot: 1, h: 30, status: "approved", by: "carla", at: "10:21", fav: 1 },
+    { code: "HLD_0144", shot: 2, h: 22, status: "alt" },
+    { code: "HLD_0146", shot: 2, h: 26, status: "approved", by: "erin", at: "11:04" },
+    { code: "HLD_0149", shot: 3, h: 18, status: "alt" },
+    { code: "HLD_0152", shot: 3, h: 20, status: "approved", by: "carla", at: "11:38", fav: 1 },
+    { code: "HLD_0158", shot: 4, h: 28, status: "pending" },
+    { code: "HLD_0160", shot: 4, h: 36, status: "pending" },
+    { code: "HLD_0163", shot: 4, h: 24, status: "pending" }
+  ];
+  const comments = {
+    "HLD_0141": [{ by: "carla", t: "10:20", body: "This one. Cap highlight is perfect." }],
+    "HLD_0160": [{ by: "erin", t: "11:51", body: "Can we see one with her chin slightly down?" }]
+  };
+  // pre-mark done shots from approved frames
+  frames.forEach(f => { if (f.status === "approved") { const s = shotBy(f.shot); s.done = 1; s.by = f.by; s.at = f.at; s.frame = f.code; } });
+
+  const schedule = [
+    { t: "7:00 AM", label: "Crew call" },
+    { t: "8:00 AM", label: "Talent call, glam" },
+    { t: "9:30 AM", label: "Looks 01 to 02, product" },
+    { t: "11:00 AM", label: "Looks 03 to 04, Ama" },
+    { t: "12:30 PM", label: "Lunch" },
+    { t: "1:30 PM", label: "Looks 05 to 07" },
+    { t: "4:00 PM", label: "Look 08, social vertical" },
+    { t: "6:00 PM", label: "Wrap" }
+  ];
+  const PTT = [
+    { id: "all",  name: "All crew", roles: ["producer", "photographer", "digi", "crew", "glam"] },
+    { id: "ge",   name: "G&E",      roles: ["producer", "photographer", "crew"] },
+    { id: "glam", name: "Glam",     roles: ["producer", "photographer", "glam"] }
+  ];
+  const tlog = [
+    { by: "dee", ch: "ge", t: "11:44", d: 3.2 },
+    { by: "maya", ch: "all", t: "11:41", d: 5.8 },
+    { by: "jonah", ch: "all", t: "11:39", d: 2.1 },
+    { by: "lena", ch: "glam", t: "11:20", d: 4.4 }
+  ];
+
+  // ---------- State ----------
+  const S = {
+    role: "producer", screen: "signin", tab: "channels", channel: null,
+    wrapped: false, filter: "all", sheet: null, ptt: "all",
+    talking: false, talkStart: 0, busy: null, busyStart: 0, nextFrame: 165, pick: 0
+  };
+  const startClock = Date.now();
+  function now() {
+    const mins = 11 * 60 + 52 + Math.floor((Date.now() - startClock) / 60000);
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return ((h - 1) % 12 + 1) + ":" + String(m).padStart(2, "0");
+  }
+  function me() { return P[ROLES[S.role].who]; }
+  function can(k) { return !!ROLES[S.role][k]; }
+  function first(id) { return P[id].name.split(" ")[0]; }
+  function shotBy(n) { return shots.find(s => s.n === n); }
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
+  function myChannels() { return channels.filter(c => c.roles.includes(S.role)); }
+  function seesReview() { return channels.find(c => c.slug === "client-review").roles.includes(S.role); }
+  function myPtt() { return PTT.filter(p => p.roles.includes(S.role)); }
+  function initials(id) { return P[id].name.split(" ").map(w => w[0]).join(""); }
+
+  // ---------- Icons ----------
+  const I = {
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+    mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+    frames: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 3h14v14"/></svg>',
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
+    starF: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
+    comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    send: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 20l18-8L3 4l2 8zm2-8h8"/></svg>',
+    clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    qr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v7h-6"/></svg>'
+  };
+
+  // ---------- Pieces ----------
+  function art(shot, h, cls, tag) {
+    const k = ART[shot] || "bottle";
+    let inner = "";
+    if (k === "bottle") inner = '<div class="b"></div>';
+    if (k === "hand") inner = '<div class="hand"></div><div class="b" style="left:46%;bottom:26%;height:36%;transform:rotate(14deg)"></div>';
+    if (k === "face") inner = '<div class="face"></div>';
+    if (k === "facebottle") inner = '<div class="face" style="left:8%"></div><div class="b" style="left:62%;height:38%"></div>';
+    if (k === "swatch") inner = '<div class="swatch"></div>';
+    if (k === "wide") inner = '';
+    return '<div class="art ' + (cls || "") + '" style="--h:' + h + '">' + inner + (tag ? '<span class="tag">' + esc(tag) + '</span>' : "") + '</div>';
+  }
+  function hdr(title, sub, opts) {
+    opts = opts || {};
+    return '<div class="hdr">' +
+      (opts.back ? '<button class="iconbtn" data-a="' + opts.back + '" aria-label="Back">' + I.back + '</button>' : "") +
+      '<div class="t"><h2>' + esc(title) + '</h2>' + (sub ? '<div class="sub">' + esc(sub) + '</div>' : "") + '</div>' +
+      (opts.right || "") + '</div>';
+  }
+  function wrapBand() { return S.wrapped ? '<div class="wrapband"><b>Wrapped</b> Read only archive</div>' : ""; }
+  function guard() { if (S.wrapped) { toast("This project is wrapped. It's read only."); return false; } return true; }
+
+  // ---------- Screens ----------
+  function signin() {
+    return '<div class="signin"><div><div class="logo">Set<i>line</i></div>' +
+      '<div class="slate">' + "<span></span>".repeat(8) + '</div>' +
+      '<p>Chat, walkie and client approvals for one shoot, in one place.</p></div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' +
+      '<button class="btn primary block" data-a="signin"> Continue with Apple</button>' +
+      '<button class="btn block" data-a="signin-email">Email me a sign-in link</button>' +
+      '<p style="font-size:12px;color:var(--faint);text-align:center;margin-top:6px">Got an invite link? Open it after you sign in.</p></div></div>';
+  }
+
+  function projects() {
+    const r = ROLES[S.role].label;
+    return '<div class="screen">' + hdr("Your shoots", me().name) +
+      '<div class="body">' +
+      '<button class="pcard" data-a="open">' +
+        '<div class="row"><span class="status ' + (S.wrapped ? "" : "live") + '">' + (S.wrapped ? "Wrapped" : "Live") + '</span><span class="meta">' + esc(r) + '</span></div>' +
+        '<h3>Halden Skincare</h3><div class="muted" style="font-size:14px">Spring Serum Launch</div>' +
+        '<div class="meta">Thu Nov 20 · Call 7:00 AM · Studio B</div></button>' +
+      '<button class="pcard" data-a="sample">' +
+        '<div class="row"><span class="status prep">Prep</span><span class="meta">Photographer</span></div>' +
+        '<h3>Marlowe Coffee</h3><div class="muted" style="font-size:14px">Holiday out-of-home</div>' +
+        '<div class="meta">Wed Dec 3 · Call 6:30 AM · Red Hook</div></button>' +
+      '<button class="pcard" data-a="sample">' +
+        '<div class="row"><span class="status">Wrapped</span><span class="meta">Producer</span></div>' +
+        '<h3>Arden Eyewear</h3><div class="muted" style="font-size:14px">Fall lookbook</div>' +
+        '<div class="meta">Oct 14 · 212 frames · 9 looks</div></button>' +
+      '<div class="btnrow"><button class="btn primary" data-a="sheet" data-v="new">' + I.plus + 'New shoot</button>' +
+      '<button class="btn" data-a="sheet" data-v="join">Join with code</button></div>' +
+      '</div></div>';
+  }
+
+  function tabs() {
+    const t = [["channels", "Chat", I.chat]];
+    if (can("walkie")) t.push(["walkie", "Walkie", I.mic]);
+    if (seesReview()) t.push(["review", "Review", I.frames]);
+    if (S.role !== "talent") t.push(["shots", "Shots", I.list]);
+    t.push(["info", "Info", I.info]);
+    const pend = frames.filter(f => f.status === "pending").length;
+    return '<nav class="tabbar" aria-label="Project">' + t.map(x =>
+      '<button class="tab" data-a="tab" data-v="' + x[0] + '"' + (S.tab === x[0] ? ' aria-current="page"' : "") + '>' + x[2] + x[1] +
+      (x[0] === "review" && pend && can("approve") ? '<span class="dot"></span>' : "") +
+      (x[0] === "channels" && myChannels().some(c => unread[c.slug]) ? '<span class="dot"></span>' : "") +
+      '</button>').join("") + '</nav>';
+  }
+
+  function project() {
+    let inner = "";
+    if (S.tab === "channels") inner = S.channel ? chat() : channelList();
+    if (S.tab === "walkie") inner = walkie();
+    if (S.tab === "review") inner = review();
+    if (S.tab === "shots") inner = shotList();
+    if (S.tab === "info") inner = info();
+    return inner + tabs();
+  }
+
+  function pinned() {
+    const done = shots.filter(s => s.done).length;
+    return '<div class="pinned"><div><div class="k">Crew call</div><div class="v amber mono" style="font-family:var(--font-head)">7:00 AM</div></div>' +
+      '<div><div class="k">Shots</div><div class="v">' + done + ' / ' + shots.length + '</div></div>' +
+      '<div><div class="k">Location</div><div class="v">Studio B, W 28th</div></div></div>';
+  }
+
+  function channelList() {
+    const list = myChannels().map(c => {
+      const last = (msgs[c.slug] || []).slice(-1)[0];
+      const preview = last ? (last.sys ? last.body : first(last.by) + ": " + (last.body || "Photo")) : c.desc;
+      const u = unread[c.slug];
+      return '<button class="crow' + (u ? " unread" : "") + '" data-a="chan" data-v="' + c.slug + '"><span class="hash">#</span>' +
+        '<span class="nm"><b>' + esc(c.slug) + (c.client ? ' <span class="tagc">Client</span>' : "") + '</b><span>' + esc(preview) + '</span></span>' +
+        (u ? '<span class="badge">' + u + '</span>' : "") + '</button>';
+    }).join("");
+    return '<div class="screen">' + hdr("Halden Skincare", "Spring Serum Launch · " + ROLES[S.role].label,
+      { back: "home", right: can("manage") && !S.wrapped ? '<button class="iconbtn" data-a="sheet" data-v="channel" aria-label="New channel">' + I.plus + '</button>' : "" }) +
+      wrapBand() + '<div class="body">' + pinned() +
+      '<div class="seclabel"><span>Channels</span><span>' + myChannels().length + '</span></div><div class="clist">' + list + '</div></div></div>';
+  }
+
+  function msgHtml(m) {
+    if (m.sys) return '<div class="msg sys"><div class="c' + (m.ok ? " ok" : "") + '">' + esc(m.body) + ' · ' + m.t + '</div></div>';
+    let att = "";
+    if (m.img) att = '<div class="attach">' + art(m.img.k === "wide" ? 1 : 1, m.img.h, "wide") + '</div>';
+    if (m.file) att = '<div class="file"><span class="ext">PDF</span>' + esc(m.file) + '</div>';
+    return '<div class="msg"><div class="av">' + initials(m.by) + '</div><div class="c"><div class="who">' + esc(P[m.by].name) + '<span>' + m.t + '</span></div>' +
+      (m.body ? '<div class="txt">' + esc(m.body) + '</div>' : "") + att + '</div></div>';
+  }
+
+  function chat() {
+    const c = channels.find(x => x.slug === S.channel);
+    const list = (msgs[c.slug] || []).map(msgHtml).join("");
+    const foot = S.wrapped
+      ? '<div class="readonly-note">Wrapped. This channel is read only.</div>'
+      : '<form class="composer" data-form="msg"><button type="button" class="iconbtn" data-a="attach" aria-label="Attach photo">' + I.clip + '</button>' +
+        '<input id="msgInput" autocomplete="off" placeholder="Message #' + esc(c.slug) + '" aria-label="Message">' +
+        '<button class="iconbtn send" aria-label="Send">' + I.send + '</button></form>';
+    return '<div class="screen" id="chatScroll">' + hdr("#" + c.slug, c.desc + " · " + c.roles.length + " roles", { back: "chanback" }) + wrapBand() +
+      '<div class="chat">' + list + '</div>' + foot + '</div>';
+  }
+
+  function walkie() {
+    if (S.wrapped) return '<div class="screen">' + hdr("Walkie", "Halden Skincare") + wrapBand() + '<div class="nowalkie"><h3>Walkie is off</h3><p>The project is wrapped.</p></div></div>';
+    const ch = PTT.find(p => p.id === S.ptt);
+    const busy = S.busy && S.busy.ch === S.ptt;
+    let big = "Channel clear", cls = "", small = myPtt().length > 1 ? ch.name + " · " + ch.roles.length + " roles" : ch.name;
+    if (S.talking) { big = "You're live"; cls = "live"; small = ch.name; }
+    else if (busy) { big = "Busy · " + first(S.busy.by); cls = "busy"; small = P[S.busy.by].title + " is talking"; }
+    const log = tlog.filter(l => l.ch === S.ptt).slice(0, 5).map(l =>
+      '<div class="r"><div class="av">' + initials(l.by) + '</div><div class="n">' + esc(P[l.by].name) + '</div><span class="mono">' + l.d.toFixed(1) + 's</span><span class="mono">' + l.t + '</span></div>').join("") || '<div class="empty">No one has talked here yet.</div>';
+    return '<div class="screen">' + hdr("Walkie", "Halden Skincare · crew only") +
+      '<div class="walkie">' +
+      (myPtt().length > 1 ? '<div class="seg" role="group" aria-label="Walkie channel">' + myPtt().map(p =>
+        '<button data-a="ptt" data-v="' + p.id + '" aria-pressed="' + (p.id === S.ptt) + '"' + (S.talking ? " disabled" : "") + '>' + p.name + '</button>').join("") + '</div>' : "") +
+      '<div class="wstate"><div class="big ' + cls + '" id="wBig">' + esc(big) + '</div><div class="small" id="wSmall">' + esc(small) + '</div></div>' +
+      '<div class="ptt-wrap"><button class="ptt' + (S.talking ? " on" : "") + '" id="pttBtn"' + (busy ? " disabled" : "") + ' aria-label="Hold to talk">' + I.mic +
+        '<span class="lab">' + (S.talking ? "Release" : busy ? "Busy" : "Hold to talk") + '</span>' +
+        '<span class="mono" id="wTimer" style="font-size:13px;color:' + (S.talking ? "#fff" : "var(--muted)") + '">' + (S.talking || busy ? "0:00.0" : "&nbsp;") + '</span></button></div>' +
+      '<div class="meter ' + (S.talking ? "live" : busy ? "busy" : "") + '" id="wMeter" aria-hidden="true">' + "<i></i>".repeat(18) + '</div>' +
+      '<div class="wfoot"><span class="ok">● AirPods Pro</span><span>dev · talk to hear <span id="wLat">' + (S.lastLat || 214) + '</span> ms</span></div>' +
+      '<div><div class="seclabel" style="margin-bottom:4px"><span>Recent on ' + esc(ch.name) + '</span></div><div class="tlog">' + log + '</div></div>' +
+      '</div></div>';
+  }
+
+  function review() {
+    const list = frames.slice().reverse().filter(f =>
+      S.filter === "all" ? true : S.filter === "fav" ? f.fav : f.status === S.filter);
+    const pend = frames.filter(f => f.status === "pending").length;
+    const cards = list.map(f => {
+      const s = shotBy(f.shot);
+      const nc = (comments[f.code] || []).length;
+      const canAct = can("approve") && !S.wrapped;
+      let actions = "";
+      if (canAct) {
+        actions = '<div class="factions">' +
+          (f.status === "pending" ? '<button class="ap" data-a="approve" data-v="' + f.code + '">' + I.check + 'Approve</button>' : "") +
+          '<button class="fav" data-a="fav" data-v="' + f.code + '" aria-pressed="' + !!f.fav + '">' + (f.fav ? I.starF : I.star) + (f.fav ? "Favorite" : "Favorite") + '</button>' +
+          '<button data-a="comments" data-v="' + f.code + '">' + I.comment + (nc ? nc : "Comment") + '</button></div>';
+      } else if (nc) {
+        actions = '<div class="factions"><button data-a="comments" data-v="' + f.code + '">' + I.comment + nc + ' comment' + (nc > 1 ? "s" : "") + '</button></div>';
+      }
+      return '<div class="fcard ' + f.status + '">' + art(f.shot, f.h, "", f.code) +
+        '<div class="fbody"><div class="fmeta"><span class="mono">' + f.code + (f.fav ? ' <span style="color:var(--amber)">★</span>' : "") + '</span><span class="pill ' + f.status + '">' + f.status + '</span></div>' +
+        '<div class="flook">Look ' + pad(s ? s.n : f.shot) + ' · ' + esc(s ? s.name : "Removed look") + '</div>' +
+        (f.status === "approved" ? '<div class="fsign">Approved by ' + esc(first(f.by)) + ' · ' + f.at + '</div>' : "") +
+        '</div>' + actions + '</div>';
+    }).join("") || '<div class="empty">No frames here yet.</div>';
+    const F = [["all", "All"], ["pending", "Waiting " + pend], ["approved", "Approved"], ["fav", "Favorites"]];
+    return '<div class="screen">' + hdr("Review", "client-review · " + frames.length + " frames",
+      { right: can("send") && !S.wrapped ? '<button class="btn primary" style="padding:8px 12px;font-size:14px" data-a="sheet" data-v="send">' + I.plus + 'Send</button>' : "" }) +
+      wrapBand() + '<div class="body"><div class="chips" role="group" aria-label="Filter">' + F.map(x =>
+        '<button class="chip" data-a="filter" data-v="' + x[0] + '" aria-pressed="' + (S.filter === x[0]) + '">' + x[1] + '</button>').join("") + '</div>' +
+      '<div class="frames">' + cards + '</div></div></div>';
+  }
+
+  function shotList() {
+    const done = shots.filter(s => s.done).length;
+    const ed = can("edit") && !S.wrapped;
+    const rows = shots.map(s =>
+      '<div class="srow' + (s.done ? " done" : "") + '"><span class="no">' + pad(s.n) + '</span>' +
+      '<button class="check" data-a="toggle" data-v="' + s.n + '" aria-label="' + (s.done ? "Mark not done" : "Mark done") + '"' + (ed ? "" : " disabled") + '>' + (s.done ? I.check : "") + '</button>' +
+      '<div class="nm"><b>' + esc(s.name) + '</b>' + (s.done ? '<span>' + (s.frame ? s.frame + " · " : "") + (s.by ? first(s.by) + " · " : "") + (s.at || "") + '</span>' : "") + '</div>' +
+      (ed ? '<button class="del" data-a="delshot" data-v="' + s.n + '" aria-label="Remove look">' + I.x + '</button>' : "") + '</div>').join("");
+    return '<div class="screen">' + hdr("Shot list", "Approving a frame checks off its look") + wrapBand() +
+      '<div class="body"><div class="progress"><div class="num">' + done + ' <span>of ' + shots.length + ' looks</span></div><div class="bar"><i style="width:' + (shots.length ? done / shots.length * 100 : 0) + '%"></i></div></div>' +
+      '<div class="slist">' + rows + '</div>' +
+      (ed ? '<form class="addrow" data-form="shot"><input id="shotInput" placeholder="Add a look" aria-label="New look name"><button class="btn">Add</button></form>' :
+        '<p class="muted" style="margin:0;font-size:13px">' + (S.wrapped ? "Wrapped. Read only." : "You can view the shot list. Producer, photographer and crew can edit it.") + '</p>') +
+      '</div></div>';
+  }
+
+  function info() {
+    const pastIdx = 3;
+    const sched = schedule.map((r, i) => '<div class="r' + (i < pastIdx ? " past" : "") + '"><span class="mono">' + r.t + '</span><span>' + esc(r.label) + '</span>' +
+      (can("manage") && !S.wrapped ? '<button class="del" data-a="delsched" data-v="' + i + '" aria-label="Remove">' + I.x + '</button>' : "") + '</div>').join("");
+    const depts = {};
+    Object.keys(P).forEach(id => { (depts[P[id].dept] = depts[P[id].dept] || []).push(id); });
+    const people = Object.keys(depts).map(d => '<div class="dept"><div class="seclabel"><span>' + esc(d) + '</span></div>' + depts[d].map(id =>
+      '<div class="prow"><div class="av">' + initials(id) + '</div><div class="n"><b>' + esc(P[id].name) + (id === ROLES[S.role].who ? ' <span class="muted" style="font-weight:400">(you)</span>' : "") + '</b><span>' + esc(P[id].title) + '</span></div>' +
+      (can("manage") && !S.wrapped && id !== "maya" && ["producer", "photographer", "digi", "crew", "glam"].includes(P[id].role) ? '<button class="ping" data-a="ping" data-v="' + id + '">Need you</button>' : '<span class="rtag">' + esc(ROLES[P[id].role].label) + '</span>') +
+      '</div>').join("") + '</div>').join("");
+    return '<div class="screen">' + hdr("Call sheet", "Halden Skincare · Spring Serum Launch",
+      { right: can("manage") && !S.wrapped ? '<button class="iconbtn" data-a="sheet" data-v="invite" aria-label="Invite">' + I.qr + '</button>' : "" }) + wrapBand() +
+      '<div class="body">' +
+      '<div class="callgrid"><div><div class="k">Date</div><div class="v">Thu Nov 20</div></div><div><div class="k">Crew call</div><div class="v amber">7:00 AM</div></div>' +
+      '<div class="full"><div class="k">Location</div><div class="addr">Studio B, 548 W 28th St, New York, NY</div><div class="muted" style="font-size:13px">Freight elevator on 28th. Load in by 6:45.</div>' +
+      '<a href="https://maps.google.com/?q=548+W+28th+St+New+York" target="_blank" rel="noopener">Open in Maps</a></div></div>' +
+      '<div><div class="seclabel"><span>Schedule</span>' + (can("manage") && !S.wrapped ? '<button data-a="sheet" data-v="sched">Add</button>' : "") + '</div><div class="sched">' + sched + '</div></div>' +
+      (can("manage") && !S.wrapped ? '<button class="btn block" data-a="sheet" data-v="invite">' + I.qr + 'Invite people</button>' : "") +
+      '<div class="people"><div class="seclabel"><span>People</span><span>' + Object.keys(P).length + '</span></div>' + people + '</div>' +
+      (can("manage") ? (S.wrapped
+        ? '<div class="danger-zone"><p>Wrapped at ' + S.wrappedAt + '. Everyone can still read and download, but nothing can be posted or changed.</p><button class="btn" data-a="unwrap">Reopen project</button></div>'
+        : '<div class="danger-zone"><p>Wrap locks the project into a read only archive. People keep access to chat, frames and the shot list.</p><button class="btn danger" data-a="sheet" data-v="wrap">Wrap project</button></div>') : "") +
+      '</div></div>';
+  }
+
+  // ---------- Sheets ----------
+  function sheetHtml() {
+    const s = S.sheet; if (!s) return "";
+    let h = '<div class="grab"></div>';
+    if (s.type === "new") h += '<h3>New shoot</h3><div class="field"><label for="nfBrand">Client or brand</label><input id="nfBrand" placeholder="Halden Skincare"></div>' +
+      '<div class="field"><label for="nfJob">Job</label><input id="nfJob" placeholder="Spring Serum Launch"></div>' +
+      '<div class="btnrow"><div class="field"><label for="nfDate">Shoot date</label><input id="nfDate" type="date"></div><div class="field"><label for="nfCall">Crew call</label><input id="nfCall" type="time" value="07:00"></div></div>' +
+      '<p>You\'ll be the producer. We set up the seven default channels and an All crew walkie channel.</p>' +
+      '<button class="btn primary block" data-a="create">Create shoot</button>';
+    if (s.type === "join") h += '<h3>Join a shoot</h3><p>Enter the code from your invite, or just open the invite link.</p>' +
+      '<div class="field"><label for="joinCode">Invite code</label><input id="joinCode" class="mono" placeholder="HLD-7Q4K" style="text-transform:uppercase"></div>' +
+      '<button class="btn primary block" data-a="join">Join</button>';
+    if (s.type === "invite") {
+      const r = s.role || "crew";
+      h += '<h3>Invite people</h3><p>Pick the role first. Anyone who opens this link joins as ' + esc(ROLES[r].label) + '.</p>' +
+        '<div class="rolepick">' + ALL.filter(x => x !== "producer").map(x => '<button class="chip" data-a="invrole" data-v="' + x + '" aria-pressed="' + (x === r) + '">' + ROLES[x].label + '</button>').join("") + '</div>' +
+        '<div class="qr"><canvas id="qr" width="25" height="25" aria-label="QR code for the invite link"></canvas></div>' +
+        '<div class="linkbox"><span class="mono" id="invLink">setline.app/j/HLD-7Q4K-' + r.slice(0, 2).toUpperCase() + '</span><button class="btn" style="padding:7px 12px" data-a="copy">Copy</button></div>' +
+        '<p style="font-size:12px">Links expire when the project wraps. You can change someone\'s role later in People.</p>';
+    }
+    if (s.type === "channel") h += '<h3>New channel</h3><div class="field"><label for="chName">Name</label><input id="chName" placeholder="locations"></div>' +
+      '<div class="field"><label>Who can see it</label><div class="rolepick">' + ALL.map(x => '<button class="chip" data-a="chrole" data-v="' + x + '" aria-pressed="' + (s.roles.includes(x)) + '"' + (CORE.includes(x) ? " disabled" : "") + '>' + ROLES[x].label + '</button>').join("") + '</div></div>' +
+      '<p style="font-size:13px">Producer and photographer always see every channel.</p><button class="btn primary block" data-a="mkchan">Create channel</button>';
+    if (s.type === "send") {
+      const open = shots.filter(x => !x.done);
+      h += '<h3>Send a frame</h3><p>Pick from the camera roll. It goes to client-review for approval.</p>' +
+        '<div class="roll">' + [0, 1, 2, 3, 4, 5].map(i => '<button data-a="pick" data-v="' + i + '" aria-pressed="' + (S.pick === i) + '" aria-label="Photo ' + (i + 1) + '">' + art([4, 5, 6, 4, 7, 8][i], 18 + i * 4, "") + '</button>').join("") + '</div>' +
+        '<div class="field"><label for="sendShot">For look</label><select id="sendShot">' + (open.length ? open.map(x => '<option value="' + x.n + '">Look ' + pad(x.n) + ' · ' + esc(x.name) + '</option>').join("") : '<option value="">Every look is done</option>') + '</select></div>' +
+        '<button class="btn primary block" data-a="sendframe"' + (open.length ? "" : " disabled") + '>Send HLD_0' + S.nextFrame + '</button>';
+    }
+    if (s.type === "comments") {
+      const list = (comments[s.code] || []).map(c => '<div class="msg"><div class="av">' + initials(c.by) + '</div><div class="c"><div class="who">' + esc(P[c.by].name) + '<span>' + c.t + '</span></div><div class="txt">' + esc(c.body) + '</div></div></div>').join("") || '<p>No comments yet.</p>';
+      h += '<h3 class="mono" style="font-family:var(--font-mono);font-size:20px">' + s.code + '</h3><div class="comments">' + list + '</div>' +
+        (can("approve") && !S.wrapped ? '<form class="addrow" data-form="comment"><input id="cmInput" placeholder="Add a comment" aria-label="Comment"><button class="btn">Post</button></form>' : "");
+    }
+    if (s.type === "sched") h += '<h3>Add to schedule</h3><div class="btnrow"><div class="field" style="flex:0 0 120px"><label for="scT">Time</label><input id="scT" type="time" value="14:30"></div><div class="field"><label for="scL">What</label><input id="scL" placeholder="Company move"></div></div><button class="btn primary block" data-a="addsched">Add</button>';
+    if (s.type === "wrap") h += '<h3>Wrap Halden Skincare?</h3><p>Everyone keeps read access to chat, frames and the shot list. Nobody can post, send frames, approve, or use the walkie. You can reopen it later.</p>' +
+      '<button class="btn danger block" data-a="wrap">Wrap and lock</button><button class="btn block" data-a="close">Cancel</button>';
+    return '<div class="scrim" data-a="scrim"><div class="sheet" role="dialog" aria-modal="true">' + h + '</div></div>';
+  }
+
+  function drawQR() {
+    const c = document.getElementById("qr"); if (!c) return;
+    const x = c.getContext("2d"); const N = 25;
+    x.fillStyle = "#f2efe8"; x.fillRect(0, 0, N, N); x.fillStyle = "#0b0c0e";
+    let seed = (S.sheet.role || "crew").split("").reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7);
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (rnd() > .52) x.fillRect(i, j, 1, 1);
+    [[0, 0], [N - 7, 0], [0, N - 7]].forEach(p => {
+      x.fillStyle = "#f2efe8"; x.fillRect(p[0] - 1 < 0 ? 0 : p[0] - 1, p[1] - 1 < 0 ? 0 : p[1] - 1, 8, 8);
+      x.fillStyle = "#0b0c0e"; x.fillRect(p[0], p[1], 7, 7);
+      x.fillStyle = "#f2efe8"; x.fillRect(p[0] + 1, p[1] + 1, 5, 5);
+      x.fillStyle = "#0b0c0e"; x.fillRect(p[0] + 2, p[1] + 2, 3, 3);
+    });
+  }
+
+  // ---------- Render ----------
+  const app = document.getElementById("app");
+  let toastTimer;
+  function render() {
+    let html = S.screen === "signin" ? signin() : S.screen === "projects" ? projects() : project();
+    html += sheetHtml();
+    app.innerHTML = html;
+    if (S.sheet && S.sheet.type === "invite") drawQR();
+    const cs = document.getElementById("chatScroll"); if (cs) cs.scrollTop = cs.scrollHeight;
+    renderRoles();
+  }
+  function toast(t, ok) {
+    const old = document.querySelector(".toast"); if (old) old.remove();
+    const d = document.createElement("div"); d.className = "toast" + (ok ? " ok" : ""); d.setAttribute("role", "status"); d.textContent = t;
+    document.getElementById("phone").appendChild(d);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => d.remove(), 2600);
+  }
+  function renderRoles() {
+    document.getElementById("roleChips").innerHTML = ALL.map(r => '<button class="rchip" data-role="' + r + '" aria-pressed="' + (S.role === r) + '">' + ROLES[r].label + '</button>').join("");
+    document.getElementById("roleNote").innerHTML = ROLE_NOTES[S.role] + '<br>You are ' + esc(me().name) + ', ' + esc(me().title) + '.';
+    const sel = document.getElementById("roleSelect");
+    if (!sel.options.length) sel.innerHTML = ALL.map(r => '<option value="' + r + '">' + ROLES[r].label + '</option>').join("");
+    sel.value = S.role;
+  }
+  function setRole(r) {
+    if (S.talking) stopTalk();
+    S.role = r; S.sheet = null;
+    if (S.channel && !myChannels().some(c => c.slug === S.channel)) S.channel = null;
+    if (S.tab === "walkie" && !can("walkie")) S.tab = "channels";
+    if (S.tab === "review" && !seesReview()) S.tab = "channels";
+    if (S.tab === "shots" && r === "talent") S.tab = "channels";
+    if (myPtt().length && !myPtt().some(p => p.id === S.ptt)) S.ptt = myPtt()[0].id;
+    render();
+  }
+
+  // ---------- Actions ----------
+  function post(slug, m) {
+    (msgs[slug] = msgs[slug] || []).push(Object.assign({ t: now() }, m));
+    if (!(S.tab === "channels" && S.channel === slug)) unread[slug] = (unread[slug] || 0) + 1;
+  }
+  function approve(code) {
+    if (!guard()) return;
+    const f = frames.find(x => x.code === code); if (!f || f.status !== "pending") return;
+    const who = ROLES[S.role].who;
+    f.status = "approved"; f.by = who; f.at = now();
+    let alts = 0;
+    frames.forEach(x => { if (x !== f && x.shot === f.shot && x.status === "pending") { x.status = "alt"; alts++; } });
+    const s = shotBy(f.shot);
+    if (s) { s.done = 1; s.by = who; s.at = f.at; s.frame = code; }
+    post("client-review", { sys: 1, ok: 1, body: first(who) + " approved " + code + ". Look " + pad(f.shot) + " checked off." });
+    render();
+    toast("Approved " + code + ". Look " + pad(f.shot) + " checked off" + (alts ? ", " + alts + " moved to Alt." : "."), true);
+  }
+
+  const A = {
+    signin() { S.screen = "projects"; render(); },
+    "signin-email"() { S.screen = "projects"; render(); toast("In the real app you tap the link in your email."); },
+    open() { S.screen = "project"; S.tab = "channels"; S.channel = null; render(); },
+    home() { S.screen = "projects"; render(); },
+    sample() { toast("Sample only. Open Halden Skincare."); },
+    tab(v) { if (S.talking) stopTalk(); S.tab = v; if (v === "channels") S.channel = null; render(); if (v === "walkie") scheduleIncoming(2500); },
+    chan(v) { S.channel = v; unread[v] = 0; render(); },
+    chanback() { S.channel = null; render(); },
+    sheet(v) { if (v !== "join" && v !== "new" && !guard()) return; S.sheet = { type: v, roles: CORE.slice(), role: "crew" }; render(); const f = app.querySelector(".sheet input"); if (f && v !== "invite") f.focus(); },
+    close() { S.sheet = null; render(); },
+    scrim(v, e) { if (e.target.classList.contains("scrim")) A.close(); },
+    create() { S.sheet = null; render(); toast("In the real app this creates the shoot with its channels and walkie."); },
+    join() { S.sheet = null; render(); toast("You'd join with the role on the invite."); },
+    invrole(v) { S.sheet.role = v; render(); },
+    copy() { const t = document.getElementById("invLink").textContent; const ok = () => toast("Link copied", true); try { navigator.clipboard.writeText(t).then(ok, ok); } catch (e) { ok(); } },
+    chrole(v) { const r = S.sheet.roles; const i = r.indexOf(v); if (i >= 0) r.splice(i, 1); else r.push(v); S.sheet.name = (document.getElementById("chName") || {}).value; render(); const n = document.getElementById("chName"); if (n && S.sheet.name) n.value = S.sheet.name; },
+    mkchan() {
+      const n = (document.getElementById("chName").value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      if (!n) { toast("Give the channel a name."); return; }
+      if (channels.some(c => c.slug === n)) { toast("#" + n + " already exists."); return; }
+      channels.push({ slug: n, desc: "Custom channel", roles: S.sheet.roles.slice(), client: S.sheet.roles.includes("client") || S.sheet.roles.includes("agency") });
+      msgs[n] = [{ sys: 1, t: now(), body: first(ROLES[S.role].who) + " created #" + n }];
+      S.sheet = null; render(); toast("#" + n + " created", true);
+    },
+    attach() { if (!guard()) return; post(S.channel, { by: ROLES[S.role].who, body: "", img: { k: "wide", h: 10 + Math.floor(Math.random() * 40) } }); render(); },
+    approve: approve,
+    fav(v) { if (!guard()) return; const f = frames.find(x => x.code === v); f.fav = !f.fav; render(); },
+    comments(v) { S.sheet = { type: "comments", code: v }; render(); },
+    filter(v) { S.filter = v; render(); },
+    pick(v) { S.pick = +v; render(); },
+    sendframe() {
+      if (!guard()) return;
+      const n = +document.getElementById("sendShot").value; if (!n) return;
+      const code = "HLD_0" + S.nextFrame; S.nextFrame += 2;
+      frames.push({ code: code, shot: n, h: 18 + S.pick * 4, status: "pending" });
+      post("client-review", { sys: 1, body: first(ROLES[S.role].who) + " sent " + code + " for Look " + pad(n) });
+      S.sheet = null; S.filter = "all"; render(); toast(code + " sent to client-review", true);
+    },
+    toggle(v) {
+      if (!guard()) return;
+      const s = shotBy(+v); s.done = !s.done;
+      if (s.done) { s.by = ROLES[S.role].who; s.at = now(); s.frame = null; } else { s.by = s.at = s.frame = null; }
+      render();
+    },
+    delshot(v) { if (!guard()) return; const i = shots.findIndex(s => s.n === +v); shots.splice(i, 1); render(); },
+    delsched(v) { if (!guard()) return; schedule.splice(+v, 1); render(); },
+    addsched() {
+      const t = document.getElementById("scT").value, l = document.getElementById("scL").value.trim();
+      if (!t || !l) { toast("Add a time and a label."); return; }
+      const [hh, mm] = t.split(":").map(Number);
+      const label = ((hh + 11) % 12 + 1) + ":" + pad(mm) + (hh < 12 ? " AM" : " PM");
+      const toMin = s => { const m = s.match(/(\d+):(\d+) (AM|PM)/); return (+m[1] % 12 + (m[3] === "PM" ? 12 : 0)) * 60 + +m[2]; };
+      schedule.push({ t: label, label: l }); schedule.sort((a, b) => toMin(a.t) - toMin(b.t));
+      S.sheet = null; render(); toast("Added to the schedule", true);
+    },
+    ping(v) { post("general", { sys: 1, body: first(ROLES[S.role].who) + " pinged " + P[v].name + ": you're needed on set" }); render(); toast(first(v) + " gets a push: you're needed on set.", true); },
+    wrap() { S.wrapped = true; S.wrappedAt = now(); S.sheet = null; post("general", { sys: 1, body: "Project wrapped by " + first(ROLES[S.role].who) + ". Read only from here." }); render(); toast("Wrapped. The project is now read only.", true); },
+    unwrap() { S.wrapped = false; post("general", { sys: 1, body: "Project reopened by " + first(ROLES[S.role].who) }); render(); toast("Reopened", true); },
+    ptt(v) { S.ptt = v; render(); }
+  };
+
+  document.addEventListener("click", e => {
+    const rc = e.target.closest("[data-role]"); if (rc) { setRole(rc.dataset.role); return; }
+    const el = e.target.closest("[data-a]"); if (!el || el.disabled) return;
+    const fn = A[el.dataset.a]; if (fn) fn(el.dataset.v, e);
+  });
+  document.getElementById("roleSelect").addEventListener("change", e => setRole(e.target.value));
+  document.addEventListener("submit", e => {
+    e.preventDefault();
+    const f = e.target.dataset.form;
+    if (f === "msg") {
+      if (!guard()) return;
+      const i = document.getElementById("msgInput"); const v = i.value.trim(); if (!v) return;
+      post(S.channel, { by: ROLES[S.role].who, body: v }); render(); const n = document.getElementById("msgInput"); if (n) n.focus();
+    }
+    if (f === "shot") {
+      if (!guard()) return;
+      const v = document.getElementById("shotInput").value.trim(); if (!v) return;
+      shots.push({ n: shots.reduce((m, s) => Math.max(m, s.n), 0) + 1, name: v }); render();
+      const n = document.getElementById("shotInput"); if (n) n.focus();
+    }
+    if (f === "comment") {
+      if (!guard()) return;
+      const v = document.getElementById("cmInput").value.trim(); if (!v) return;
+      (comments[S.sheet.code] = comments[S.sheet.code] || []).push({ by: ROLES[S.role].who, t: now(), body: v }); render();
+    }
+  });
+
+  // ---------- Walkie simulation ----------
+  let meterTimer = null, incomingTimer = null;
+  function meterTick() {
+    const bars = document.querySelectorAll("#wMeter i");
+    const active = S.talking || (S.busy && S.busy.ch === S.ptt);
+    bars.forEach((b, i) => { const c = Math.abs(i - 8.5) / 9; b.style.height = active ? (4 + Math.random() * 22 * (1 - c * .7)) + "px" : "4px"; });
+    const tm = document.getElementById("wTimer");
+    const start = S.talking ? S.talkStart : (S.busy ? S.busyStart : 0);
+    if (tm && start) { const s = (Date.now() - start) / 1000; tm.textContent = Math.floor(s / 60) + ":" + String((s % 60).toFixed(1)).padStart(4, "0"); }
+  }
+  function ensureMeter() { if (!meterTimer) meterTimer = setInterval(meterTick, 80); }
+  function startTalk() {
+    if (S.wrapped || S.talking || S.tab !== "walkie") return;
+    if (S.busy && S.busy.ch === S.ptt) { toast("Wait for " + first(S.busy.by) + " to finish."); return; }
+    S.talking = true; S.talkStart = Date.now(); S.lastLat = 160 + Math.floor(Math.random() * 120);
+    clearTimeout(incomingTimer);
+    render(); ensureMeter();
+  }
+  function stopTalk() {
+    if (!S.talking) return;
+    const d = (Date.now() - S.talkStart) / 1000;
+    S.talking = false;
+    if (d > 0.3) tlog.unshift({ by: ROLES[S.role].who, ch: S.ptt, t: now(), d: d });
+    if (S.tab === "walkie") { render(); scheduleIncoming(6000); }
+  }
+  function scheduleIncoming(ms) {
+    clearTimeout(incomingTimer);
+    incomingTimer = setTimeout(() => {
+      if (S.screen !== "project" || S.tab !== "walkie" || S.talking || S.wrapped || !can("walkie")) return;
+      const ch = PTT.find(p => p.id === S.ptt);
+      const pool = Object.keys(P).filter(id => ch.roles.includes(P[id].role) && id !== ROLES[S.role].who);
+      const by = !tlog.some(l => l.fresh) && pool.includes("jonah") ? "jonah" : pool[Math.floor(Math.random() * pool.length)];
+      S.busy = { by: by, ch: S.ptt }; S.busyStart = Date.now();
+      render(); ensureMeter();
+      const dur = 2600 + Math.random() * 1800;
+      setTimeout(() => {
+        tlog.unshift({ by: by, ch: S.busy ? S.busy.ch : S.ptt, t: now(), d: dur / 1000, fresh: 1 });
+        S.busy = null; if (S.tab === "walkie") render();
+        scheduleIncoming(14000 + Math.random() * 8000);
+      }, dur);
+    }, ms);
+  }
+  app.addEventListener("pointerdown", e => {
+    const b = e.target.closest("#pttBtn"); if (!b || b.disabled) return;
+    e.preventDefault(); startTalk();
+  });
+  window.addEventListener("pointerup", stopTalk);
+  window.addEventListener("pointercancel", stopTalk);
+  app.addEventListener("contextmenu", e => { if (e.target.closest("#pttBtn")) e.preventDefault(); });
+  window.addEventListener("keydown", e => {
+    if (e.code !== "Space" || e.repeat || S.tab !== "walkie" || S.screen !== "project") return;
+    if (e.target.matches("input, textarea, select")) return;
+    e.preventDefault(); startTalk();
+  });
+  window.addEventListener("keyup", e => { if (e.code === "Space") stopTalk(); });
+  window.addEventListener("blur", stopTalk);
+  setInterval(() => { const c = document.getElementById("clock"); if (c) c.textContent = now(); }, 15000);
+
+  render();
+})();
+</script>
+</body>
+</html>
