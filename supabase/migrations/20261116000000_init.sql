@@ -1,5 +1,4 @@
 -- Setline: initial schema.
--- STATUS: PROPOSAL for review. Not applied to any database yet.
 --
 -- Principles
 --   * Every table has row-level security (RLS). A user only touches rows for
@@ -9,8 +8,6 @@
 --     A future web review page calls the same functions.
 --   * A wrapped project rejects every write, enforced by triggers, except the
 --     producer reopening it.
-
-create extension if not exists pgcrypto;
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -356,8 +353,8 @@ begin
   if not role_can(p_project, 'manage') then raise exception 'Only the producer can invite.' using errcode = '42501'; end if;
   if p_role = 'producer' then raise exception 'Invite links cannot make producers.'; end if;
   loop
-    v_code := upper(substr(translate(encode(gen_random_bytes(8), 'base64'), '+/=0O1I', ''), 1, 8));
-    exit when length(v_code) = 8 and not exists (select 1 from project_invites where code = v_code);
+    v_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+    exit when not exists (select 1 from project_invites where code = v_code);
   end loop;
   insert into project_invites (code, project_id, role, created_by) values (v_code, p_project, p_role, auth.uid());
   return v_code;
